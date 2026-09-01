@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>TrailShop.Api</RootNamespace>
+    <UserSecretsId>trailshop-training-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrailShop.Application\TrailShop.Application.csproj" />
+    <ProjectReference Include="..\TrailShop.Infrastructure\TrailShop.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

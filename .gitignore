@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+TestResults/
+
+# Local databases created by the training app
+*.db
+*.db-shm
+*.db-wal
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.suo
+.idea/
+
+# Operating system files (Finder on macOS, Explorer on Windows)
+.DS_Store
+Thumbs.db
+
+# Personal Claude Code files (never commit)
+.claude/settings.local.json
+CLAUDE.local.md

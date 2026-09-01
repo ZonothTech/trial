@@ -1,0 +1,11 @@
+<Project>
+  <!-- Shared settings for every project in the TrailShop training solution. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- Kept off on purpose: the training repo ships with an intentional NU1903 restore warning (Session 7). -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,18 @@
+@page "/products/{id:int}"
+@model TrailShop.Api.Pages.Products.DetailsModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@Model.Product.Name - TrailShop</title>
+</head>
+<body>
+    <main>
+        <h1>@Model.Product.Name</h1>
+        <p>Price: @Model.Product.UnitPrice.ToString("0.00") EUR</p>
+        <section aria-label="Description">
+            @Html.Raw(Model.Product.Description)
+        </section>
+    </main>
+</body>
+</html>

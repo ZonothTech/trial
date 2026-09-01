@@ -1,0 +1,28 @@
+# TrailShop sample requests. Open in Visual Studio and click "Send request".
+# Demo users (synthetic): alice, bob, carol, admin. The X-Demo-User header is a
+# training stand-in for real authentication.
+
+@host = http://localhost:5080
+
+### List products
+GET {{host}}/api/products
+
+### Search products
+GET {{host}}/api/products/search?q=tent
+
+### Get one product
+GET {{host}}/api/products/1
+
+### Get a product by SKU
+GET {{host}}/api/products/by-sku/TS-BOOT-M42
+
+### Alice reads her own order
+GET {{host}}/api/orders/1
+X-Demo-User: alice
+
+### Quote for an order
+GET {{host}}/api/orders/1/quote
+X-Demo-User: alice
+
+### Product page (Razor)
+GET {{host}}/products/1

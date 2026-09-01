@@ -1,0 +1,24 @@
+diff --git a/src/TrailShop.Domain/Pricing/PricingCalculator.cs b/src/TrailShop.Domain/Pricing/PricingCalculator.cs
+index f3affeb..f1f3797 100644
+--- a/src/TrailShop.Domain/Pricing/PricingCalculator.cs
++++ b/src/TrailShop.Domain/Pricing/PricingCalculator.cs
+@@ -12,10 +12,18 @@ public class PricingCalculator
+     public const decimal SilverRate = 0.03m;
+     public const decimal GoldRate = 0.10m;
+ 
+-    public PriceQuote CalculateQuote(IReadOnlyCollection<OrderLine> lines, Customer customer)
++    /// <param name="asOfUtc">
++    /// Pricing date. Added for time-limited promotions (ticket PRICE-118, not finished yet).
++    /// </param>
++    public PriceQuote CalculateQuote(IReadOnlyCollection<OrderLine> lines, Customer customer, DateTime asOfUtc)
+     {
+         ArgumentNullException.ThrowIfNull(lines);
+ 
++        if (asOfUtc.Kind != DateTimeKind.Utc)
++        {
++            throw new ArgumentException("Pricing date must be UTC.", nameof(asOfUtc));
++        }
++
+         decimal subtotal = 0m;
+         int units = 0;
+ 

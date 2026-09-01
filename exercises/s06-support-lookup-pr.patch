@@ -1,0 +1,86 @@
+diff --git a/src/TrailShop.Api/Controllers/SupportController.cs b/src/TrailShop.Api/Controllers/SupportController.cs
+new file mode 100644
+index 0000000..143039c
+--- /dev/null
++++ b/src/TrailShop.Api/Controllers/SupportController.cs
+@@ -0,0 +1,27 @@
++using Microsoft.AspNetCore.Authorization;
++using Microsoft.AspNetCore.Mvc;
++using TrailShop.Application.Orders;
++
++namespace TrailShop.Api.Controllers;
++
++/// <summary>
++/// Lets support staff look up a customer's orders during a phone call.
++/// </summary>
++[ApiController]
++[Authorize]
++[Route("api/support")]
++public class SupportController : ControllerBase
++{
++    private readonly OrderService _orders;
++
++    public SupportController(OrderService orders)
++    {
++        _orders = orders;
++    }
++
++    [HttpGet("orders")]
++    public async Task<ActionResult<IReadOnlyList<OrderDto>>> FindOrders([FromQuery] string email, CancellationToken cancellationToken)
++    {
++        return Ok(await _orders.FindByCustomerEmailAsync(email, cancellationToken));
++    }
++}
+diff --git a/src/TrailShop.Application/Abstractions/IOrderRepository.cs b/src/TrailShop.Application/Abstractions/IOrderRepository.cs
+index 72c19b8..3254814 100644
+--- a/src/TrailShop.Application/Abstractions/IOrderRepository.cs
++++ b/src/TrailShop.Application/Abstractions/IOrderRepository.cs
+@@ -8,4 +8,9 @@ public interface IOrderRepository
+     /// Loads an order with its lines and line products.
+     /// </summary>
+     Task<Order?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
++
++    /// <summary>
++    /// Finds all orders placed by the customer with the given email address.
++    /// </summary>
++    Task<IReadOnlyList<Order>> FindByCustomerEmailAsync(string email, CancellationToken cancellationToken = default);
+ }
+diff --git a/src/TrailShop.Application/Orders/OrderService.cs b/src/TrailShop.Application/Orders/OrderService.cs
+index 6292374..2d03a9c 100644
+--- a/src/TrailShop.Application/Orders/OrderService.cs
++++ b/src/TrailShop.Application/Orders/OrderService.cs
+@@ -50,6 +50,14 @@ public class OrderService
+         return new PriceQuoteDto(order.Id, quote.Subtotal, quote.BulkDiscount, quote.LoyaltyDiscount, quote.Total);
+     }
+ 
++    public async Task<IReadOnlyList<OrderDto>> FindByCustomerEmailAsync(string email, CancellationToken cancellationToken = default)
++    {
++        _logger.LogInformation("Support lookup for customer {CustomerEmail}", email);
++
++        var orders = await _orders.FindByCustomerEmailAsync(email, cancellationToken);
++        return orders.Select(ToDto).ToList();
++    }
++
+     private static OrderDto ToDto(Order order) => new(
+         order.Id,
+         order.CustomerId,
+diff --git a/src/TrailShop.Infrastructure/Repositories/OrderRepository.cs b/src/TrailShop.Infrastructure/Repositories/OrderRepository.cs
+index 7c74a3e..f78c8fa 100644
+--- a/src/TrailShop.Infrastructure/Repositories/OrderRepository.cs
++++ b/src/TrailShop.Infrastructure/Repositories/OrderRepository.cs
+@@ -22,4 +22,15 @@ public class OrderRepository : IOrderRepository
+                 .ThenInclude(l => l.Product)
+             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+     }
++
++    public async Task<IReadOnlyList<Order>> FindByCustomerEmailAsync(string email, CancellationToken cancellationToken = default)
++    {
++        var sql = "SELECT o.* FROM Orders o JOIN Customers c ON c.Id = o.CustomerId WHERE c.Email = '" + email + "'";
++
++        return await _db.Orders
++            .FromSqlRaw(sql)
++            .AsNoTracking()
++            .Include(o => o.Lines)
++            .ToListAsync(cancellationToken);
++    }
+ }
