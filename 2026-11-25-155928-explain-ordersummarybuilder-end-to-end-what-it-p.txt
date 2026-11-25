@@ -1,0 +1,283 @@
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/work/training/claude-code-training/trailshop-labs-04-07
+
+
+❯ Explain OrderSummaryBuilder end to end: what it produces, who calls it, what  
+  it depends on, and the two riskiest things about changing it. Don't change    
+  anything. Produz o output em português                                        
+
+  Searched for 2 patterns, read 2 files, listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+⏺ A rever os testes de pricing para confirmar a cobertura do limite de 100
+  unidades; depois resumo.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ OrderSummaryBuilder: explicação completa
+
+  Não alterei nada. Só li código e corri grep.
+
+  1. O que produz
+
+  src/TrailShop.Application/Orders/OrderSummaryBuilder.cs:11:
+  BuildPlainTextSummary(Order order, Customer customer) devolve uma string em
+  texto simples. Segundo o comentário XML, é o resumo usado nos emails de 
+  confirmação de encomenda:
+
+  TrailShop order #42
+  Customer: Alice Example
+  ----
+  2 x Tent @ 150.00 = 300.00
+  ----
+  Subtotal: 300.00
+  Bulk discount: -15.00            (só se unidades > 100)
+  Loyalty discount (Gold): -28.50  (só se desconto > 0)
+  Total: 256.50
+  Ship to: <morada completa>
+
+  O que faz, passo a passo:
+  - Percorre order.Lines. Usa l.Product.Name se o Product estiver carregado, e
+    "Item {ProductId}" caso contrário.
+  - Soma o subtotal (Quantity * UnitPrice) e o total de unidades.
+  - Aplica o desconto de volume de 5% quando há mais de 100 unidades.
+  - Aplica o desconto de fidelização sobre sub - d1: Gold 10%, Silver 3%. Cada
+    desconto é arredondado a 2 casas com AwayFromZero.
+  - Escreve a ShippingAddress no fim.
+
+  2. Quem o chama
+
+  Ninguém, por agora. A única referência é o registo em DI
+  (src/TrailShop.Application/DependencyInjection.cs:15,
+  AddScoped<OrderSummaryBuilder>()). Não há controller, serviço, sender de email
+  nem teste que o injete.
+
+  O commit 26cd8fa configurou SMTP e o cd56539 removeu essa configuração, mas
+  não existe código de envio de email em src/. O builder fica disponível, à
+  espera de quem o use.
+
+  3. De que depende
+
+  - Só de entidades do Domain: Order, OrderLine (com Product? opcional),
+    Customer e LoyaltyTier. Recebe entidades EF, não DTOs.
+  - Não usa PricingCalculator. O comentário diz "Legacy code: written before
+    PricingCalculator existed". As regras de preço estão duplicadas à mão, com
+    taxas e limites em literais (100, 0.05m, 0.10m, 0.03m) em vez das constantes
+    PricingCalculator.BulkDiscountThresholdUnits e afins.
+  - Não tem dependências injetadas, não usa I/O e não é async. É uma função
+    pura.
+
+  4. Os dois maiores riscos ao alterá-lo
+
+  Risco 1: lógica de preços duplicada, que já diverge da especificação
+
+  O email mostra totais calculados por um segundo motor de preços, separado de
+  PricingCalculator, que é o que gera GetQuoteAsync. Já há divergências
+  concretas:
+
+  - Limite do desconto de volume. docs/pricing-rules.md §2 diz "100 units or 
+    more". Tanto o builder (n > 100, linha 30) como o PricingCalculator usam > 
+    100. Numa encomenda de exatamente 100 unidades, o desconto não é aplicado em
+    lado nenhum. Nenhum teste cobre esse limite: o teste de volume usa 150
+    unidades.
+  - Validação. O builder não valida quantidades ≤ 0 nem preços negativos (§5). O
+    calculador lança exceção nesses casos. Com dados inválidos, o email mostra
+    um total e a cotação rebenta.
+  - Formatação. ToString("0.00") sem CultureInfo.InvariantCulture viola o
+    CLAUDE.md. Numa máquina em pt-PT sai 300,00.
+
+  Qualquer "correção" mexe em regras de preço. Pelo CLAUDE.md, isso exige um
+  plano aprovado antes, e uma pergunta antes de alinhar código e especificação.
+  Se corrigir só o builder ou só o calculador, o email e a cotação passam a
+  mostrar totais diferentes ao cliente. A correção segura é pôr o builder a
+  delegar no PricingCalculator e corrigir o >= num único sítio, com aprovação.
+
+  Risco 2: o output contém PII e não tem testes que o protejam
+
+  A string inclui DisplayName e a morada de entrega completa (linha 55). As
+  regras de segurança proíbem registar moradas em logs. Se alguém ligar o
+  builder a um sender de email e registar o corpo da mensagem (um padrão comum
+  ao depurar SMTP), a morada vai parar aos logs. O OrderService já regista
+  customer?.Email (OrderService.cs:44-46), o que mostra que este tipo de fuga é
+  real nesta base de código.
+
+  Além disso, não há nenhum teste para este builder. Uma refatoração, por
+  exemplo para StringBuilder ou para delegar no calculador, pode mudar o texto
+  ou os valores sem que nada falhe.
+
+  Há um ponto relacionado a ter em conta quando houver um chamador: o builder
+  confia que customer é o dono da encomenda. O GetQuoteAsync tem um bug que
+  procura o cliente por order.Id em vez de order.CustomerId (linha 41). Se o
+  futuro código de email repetir esse padrão, o resumo sai com o nome e o tier
+  de fidelização de outro cliente.
+
+  ---
+
+  Antes de qualquer alteração, convinha escrever testes de caracterização que
+  fixem o output atual, incluindo o caso das 100 unidades e a cultura pt-PT.
+
+✻ Brewed for 49s · done 3:44 PM
+
+※ recap: Pediste uma explicação do OrderSummaryBuilder sem alterar código, e a análise está concluída. Próximo passo, se quiseres: escrever testes de caracterização, sobretudo para o limite das 100 unidades, antes de qualquer alteração. (turn off recaps in /config)
+
+❯ Temos a descrição do incidente em                                             
+  @docs/incidents/INC-0042-order-quote-500.md. Encontra a root cause, explica   
+  com detalhe a evidência, e lista qualquer outra order que possa estar afetada 
+  pelo mesmo problema. Não faças nenhuma alteração.                             
+  ⎿  Read docs/incidents/INC-0042-order-quote-500.md (35 lines)
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ INC-0042: causa raiz do HTTP 500 na cotação
+
+  Não alterei nada. A análise baseia-se no código e nos dados de seed
+  (SeedData.cs). Não corri a aplicação nem consultei a base de dados SQLite
+  local, que pode conter dados diferentes do seed.
+
+  Causa raiz
+
+  src/TrailShop.Application/Orders/OrderService.cs:41 procura o cliente pelo ID 
+  da encomenda em vez do ID do dono da encomenda:
+
+  var customer = await _customers.GetByIdAsync(order.Id, cancellationToken);
+  // errado
+  //                                          deveria ser order.CustomerId
+
+  Para a encomenda 5, o código procura o cliente com Id = 5. Esse cliente não
+  existe (o seed só tem os clientes 1 a 4), por isso GetByIdAsync devolve null.
+  Na linha 48, o operador customer! esconde o aviso de nulabilidade do
+  compilador e passa null ao PricingCalculator. O cálculo rebenta ao ler
+  customer.LoyaltyTier.
+
+  Evidência, passo a passo
+
+  #: 1
+  Evidência: Log: Calculating quote for order 5 for customer (null)
+  O que prova: A linha 43-46 regista customer?.Email. O valor (null) mostra
+    que o cliente já era null antes do cálculo. O preço não é a causa, é só
+    onde o erro aparece.
+  ────────────────────────────────────────
+  #: 2
+  Evidência: Stack: OrderService.cs:line 48 → PricingCalculator.cs:line 42 →
+    line 49
+  O que prova: A linha 48 é CalculateQuote(order.Lines, customer!). A linha 42
+    chama ApplyLoyaltyDiscount(..., customer). A linha 49 é
+    customer.LoyaltyTier switch, a primeira vez que o código lê uma
+    propriedade de customer. É aí que surge a NullReferenceException.
+  ────────────────────────────────────────
+  #: 3
+  Evidência: CustomerRepository.GetByIdAsync usa FirstOrDefaultAsync(c => c.Id
+    == id)
+  O que prova: Quando não encontra o cliente, devolve null em vez de lançar
+    exceção. Isto bate com o passo 1.
+  ────────────────────────────────────────
+  #: 4
+  Evidência: Seed: a encomenda 5 tem customerId: 2 (bob) e não existe nenhum
+    Customer com Id = 5
+  O que prova: Com order.CustomerId o código encontraria o bob (Silver) e
+    funcionaria. Com order.Id não encontra ninguém.
+  ────────────────────────────────────────
+  #: 5
+  Evidência: O único teste de cotação usa a encomenda 1 da alice
+  O que prova: A encomenda 1 pertence ao cliente 1, por isso order.Id ==
+    order.CustomerId por coincidência. O teste passa e esconde o bug.
+  ────────────────────────────────────────
+  #: 6
+  Evidência: git log: o ficheiro não mudou desde 5bef096 Initial TrailShop
+    import
+  O que prova: O bug existe desde o início e não foi introduzido por um commit
+    recente.
+
+  Encomendas afetadas
+
+  Simulei o resultado atual para todas as encomendas do seed:
+
+  Encomenda: 1
+  Dono real (tier): alice (Gold)
+  Cliente usado (Id = order.Id): alice (Gold)
+  Resultado atual: ✅ 323.01, certo por coincidência
+  Correto (com o código atual de bulk): 323.01
+  ────────────────────────────────────────
+  Encomenda: 2
+  Dono real (tier): carol (None)
+  Cliente usado (Id = order.Id): bob (Silver)
+  Resultado atual: ⚠️ total 145.40 (desconto indevido de 4.50)
+  Correto (com o código atual de bulk): 149.90
+  ────────────────────────────────────────
+  Encomenda: 3
+  Dono real (tier): bob (Silver)
+  Cliente usado (Id = order.Id): carol (None)
+  Resultado atual: ⚠️ total 1450.00 (sem os 3%)
+  Correto (com o código atual de bulk): 1406.50
+  ────────────────────────────────────────
+  Encomenda: 4
+  Dono real (tier): alice (Gold)
+  Cliente usado (Id = order.Id): admin (None)
+  Resultado atual: ⚠️ total 98.80 (sem os 10%)
+  Correto (com o código atual de bulk): 88.92
+  ────────────────────────────────────────
+  Encomenda: 5
+  Dono real (tier): bob (Silver)
+  Cliente usado (Id = order.Id): não existe
+  Resultado atual: ❌ HTTP 500 (o caso reportado)
+  Correto (com o código atual de bulk): 173.63
+  ────────────────────────────────────────
+  Encomenda: 6
+  Dono real (tier): carol (None)
+  Cliente usado (Id = order.Id): não existe
+  Resultado atual: ❌ HTTP 500
+  Correto (com o código atual de bulk): 347.00
+  ────────────────────────────────────────
+  Encomenda: 7
+  Dono real (tier): alice (Gold)
+  Cliente usado (Id = order.Id): não existe
+  Resultado atual: ❌ HTTP 500
+  Correto (com o código atual de bulk): 134.91
+
+  Há dois tipos de impacto:
+  - Falha visível (5, 6, 7). Acontece sempre que order.Id > 4, ou seja, para
+    qualquer encomenda nova criada no futuro.
+  - Falha silenciosa (2, 3, 4). Não há erro, mas o cliente vê um preço errado
+    calculado com o tier de outra pessoa. Isto é mais grave do que o 500, porque
+    ninguém se queixa. A encomenda 2 dá um desconto que a carol não deveria
+    ter. As encomendas 3 e 4 cobram a mais a clientes com fidelização.
+  - Fuga de dados nos logs. A linha 43-46 regista o email do cliente errado, por
+    exemplo o email do bob ou do admin numa cotação da carol ou da alice.
+    Registar emails já viola o CLAUDE.md, mesmo com o cliente certo.
+
+  Problemas relacionados (não são a causa, mas ficam expostos)
+
+  1. Falta de verificação de dono. GetQuoteAsync e GetOrderAsync não confirmam
+     que a encomenda pertence a quem faz o pedido. Qualquer utilizador
+     autenticado consegue ver qualquer encomenda. O CLAUDE.md pede esta
+     verificação na camada Application, com resposta 404.
+  2. customer!. O operador de supressão de nulos escondeu o problema. Mesmo
+     depois da correção, um cliente inexistente (dados inconsistentes) deve dar
+     um erro controlado e não um NullReferenceException.
+  3. Limite do desconto de volume. A encomenda 3 tem exatamente 100 unidades.
+     docs/pricing-rules.md diz "100 or more", mas o código usa > 100. Pela
+     especificação, o total correto seria 1336.17 e não 1406.50. É um bug
+     independente e, pelo CLAUDE.md, preciso de perguntar antes de mexer em
+     código ou especificação de preços.
+
+  Correção proposta (para aprovação; toca em data access e pricing)
+
+  - Mudar order.Id para order.CustomerId em OrderService.cs:41, remover o ! e
+    tratar o cliente null explicitamente.
+  - Remover o email do log e registar CustomerId no seu lugar.
+  - Adicionar testes de integração com ShopApiFactory:
+    - Quote_for_order_whose_id_has_no_matching_customer_returns_200: a encomenda
+      5 como bob, que reproduz o INC-0042.
+    - Quote_uses_loyalty_tier_of_order_owner: a encomenda 4 da alice deve ter
+      10% de desconto.
+  - A verificação de dono e o limite de 100 unidades ficam como decisões
+    separadas, a combinar contigo.
+
+  Digo-me se avanço com esta correção.
+
+✻ Brewed for 39s · done 3:54 PM
+
+❯ /memory 
+  ⎿  Opened ~/.claude/CLAUDE.md
+
+     ▎ To use a different editor, set the $EDITOR or $VISUAL environment variable.

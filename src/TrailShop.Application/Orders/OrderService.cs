@@ -38,14 +38,16 @@ public class OrderService
             return null;
         }
 
-        var customer = await _customers.GetByIdAsync(order.Id, cancellationToken);
+        var customer = await _customers.GetByIdAsync(order.CustomerId, cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"Order {order.Id} references customer {order.CustomerId}, which does not exist.");
 
         _logger.LogInformation(
-            "Calculating quote for order {OrderId} for customer {CustomerEmail}",
+            "Calculating quote for order {OrderId} for customer {CustomerId}",
             order.Id,
-            customer?.Email);
+            customer.Id);
 
-        var quote = _pricing.CalculateQuote(order.Lines, customer!);
+        var quote = _pricing.CalculateQuote(order.Lines, customer);
 
         return new PriceQuoteDto(order.Id, quote.Subtotal, quote.BulkDiscount, quote.LoyaltyDiscount, quote.Total);
     }
