@@ -35,7 +35,7 @@ public class PricingCalculator
             units += line.Quantity;
         }
 
-        var bulkDiscount = units > BulkDiscountThresholdUnits
+        var bulkDiscount = units >= BulkDiscountThresholdUnits
             ? Round(subtotal * BulkDiscountRate)
             : 0m;
 
