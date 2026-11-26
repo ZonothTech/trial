@@ -52,6 +52,14 @@ public class OrderService
         return new PriceQuoteDto(order.Id, quote.Subtotal, quote.BulkDiscount, quote.LoyaltyDiscount, quote.Total);
     }
 
+    public async Task<IReadOnlyList<OrderDto>> FindByCustomerEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Support lookup for customer {CustomerEmail}", email);
+
+        var orders = await _orders.FindByCustomerEmailAsync(email, cancellationToken);
+        return orders.Select(ToDto).ToList();
+    }
+
     private static OrderDto ToDto(Order order) => new(
         order.Id,
         order.CustomerId,
