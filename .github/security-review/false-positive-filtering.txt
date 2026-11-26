@@ -1,0 +1,4 @@
+Known non-issues in TrailShop. Add only false positives you confirmed during triage, each with a reason.
+- FromSqlInterpolated and FromSql with interpolated values are parameterized by EF Core. Do not report them as SQL injection.
+- Constants that hold header names (for example "X-Api-Key") are not secrets.
+- The X-Demo-User authentication handler is a documented local-only training stand-in; the app refuses to start outside Development.

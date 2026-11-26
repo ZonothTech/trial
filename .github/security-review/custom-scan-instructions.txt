@@ -1,0 +1,6 @@
+TrailShop team rules (ASP.NET Core, EF Core). Replace or extend with your Session 5 team rules.
+- Every controller or action must declare [Authorize] (with a policy or role where needed) or [AllowAnonymous].
+- Order, quote and customer data endpoints must check that the caller owns the resource.
+- SQL must never be built from strings. FromSqlRaw/ExecuteSqlRaw with concatenated or pre-built strings is a finding.
+- Html.Raw on data that a user or admin can write is a finding.
+- Logging headers, emails, addresses, tokens or connection strings is a finding.

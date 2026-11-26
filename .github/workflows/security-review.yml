@@ -1,0 +1,85 @@
+# Session 6 lab starter: Anthropic's security-review action plus an explicit merge gate.
+# Copy to .github/workflows/security-review.yml, and copy the two policy files in security-review/
+# to .github/security-review/ on main.
+#
+# Why each piece exists:
+# - The action only comments. It reports findings-count and turns its own failure into a warning, so the
+#   job passes either way. The "gate" job turns the result into a check that can fail.
+# - run-every-commit: true. By default the action scans once per PR and skips later pushes; a skipped scan
+#   reports no count. The gate also fails when the count is missing, so "not scanned" never reads as "clean".
+# - Policy files (custom rules, known false positives) are read from the BASE branch in a separate checkout,
+#   so a PR cannot loosen its own review by editing them.
+# - Fork PRs get no secrets and are not scanned here; the gate fails for them on purpose ("not reviewed"),
+#   because required checks treat skipped jobs as passing.
+# - The action README says it is not hardened against prompt injection: use it on trusted (same-repo) PRs.
+# The action has no release tags; this pins a commit SHA from 2026-02-11. [VERIFY BEFORE DELIVERY]
+name: security-review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      findings: ${{ steps.scan.outputs.findings-count }}
+    steps:
+      - name: Check out the PR head (code under review)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Check out review policy files from the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .review-policy
+          sparse-checkout: .github/security-review
+          persist-credentials: false
+
+      - name: Claude security review (comments on the PR)
+        id: scan
+        uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda # main, 2026-02-11
+        with:
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+          run-every-commit: true
+          exclude-directories: tests,docs,.review-policy
+          # Both inputs take a path to a text file (checked in action.yml at the pinned SHA).
+          custom-security-scan-instructions: .review-policy/.github/security-review/custom-scan-instructions.txt
+          false-positive-filtering-instructions: .review-policy/.github/security-review/false-positive-filtering.txt
+
+  gate:
+    needs: review
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail unless the review completed and reported zero findings
+        env:
+          REVIEW_RESULT: ${{ needs.review.result }}
+          FINDINGS: ${{ needs.review.outputs.findings }}
+        run: |
+          echo "Review job result: $REVIEW_RESULT; findings: ${FINDINGS:-missing}"
+          if [ "$REVIEW_RESULT" != "success" ]; then
+            echo "::error::Security review did not run or did not complete (fork PRs are not reviewed here). Treat as not reviewed."
+            exit 1
+          fi
+          if [ -z "$FINDINGS" ]; then
+            echo "::error::Security review reported no findings count. Treat as not reviewed."
+            exit 1
+          fi
+          if [ "$FINDINGS" != "0" ]; then
+            echo "::error::Security review reported $FINDINGS finding(s). Triage them in the PR before merging."
+            exit 1
+          fi
